@@ -1,0 +1,13 @@
+# supabase/config.toml
+# Minimal config — update project_id before deploying
+[api]
+port = 54321
+
+[db]
+port = 54322
+
+[studio]
+port = 54323
+
+[functions]
+# Edge functions are automatically picked up from ./functions/<name>/index.ts
