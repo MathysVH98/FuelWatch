@@ -35,11 +35,12 @@ export function StationsPage() {
 
   const isRegulated = PETROL_TYPES.includes(fuelType)
 
-  // For regulated fuels, inject the DMRE price into every station that has no
-  // user-reported price yet. This means the list is populated from the first load.
+  // Inject the DMRE price into every station that has no user-reported price yet.
+  // For petrol: DMRE price IS the price (regulated — all stations charge the same).
+  // For diesel: DMRE price is the maximum — used as a fallback until users report cheaper.
   const stationsWithDmre: Station[] = useMemo(() => {
     const dmrePrice = dmrePrices[fuelType]
-    if (!isRegulated || dmrePrice === undefined) return stations
+    if (dmrePrice === undefined) return stations
     return stations.map((s) => ({
       ...s,
       prices: {
@@ -47,7 +48,7 @@ export function StationsPage() {
         [fuelType]: s.prices?.[fuelType] ?? dmrePrice,
       },
     }))
-  }, [stations, fuelType, isRegulated, dmrePrices])
+  }, [stations, fuelType, dmrePrices])
 
   // A station's displayed price is "DMRE official" when:
   // – it's a regulated fuel, AND
