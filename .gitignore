@@ -27,3 +27,5 @@ npm-debug.log*
 # Capacitor
 android/
 ios/
+supabase.tar.gz
+supabase/.temp/
