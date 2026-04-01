@@ -1,8 +1,15 @@
 // supabase/functions/update-dmre-prices/index.ts
-// Deno Edge Function — parse DMRE gazette text with Claude and upsert prices
-// Deploy:  supabase functions deploy update-dmre-prices
-// Invoke:  POST /functions/v1/update-dmre-prices  { "gazettText": "..." }
-//          or scheduled via pg_cron / Supabase Scheduled Functions
+// Deno Edge Function — auto-fetches current SA fuel prices and upserts into dmre_prices
+//
+// Sources tried in order:
+//   1. AA South Africa  — https://www.aa.co.za/fuel-price/
+//   2. DMRE gov page    — https://www.energy.gov.za/petroleum/fuel-prices/retail-motor-fuel-price
+//
+// Claude parses whichever page responds and extracts all four fuel types × two zones.
+//
+// Deploy:   supabase functions deploy update-dmre-prices
+// Invoke:   POST /functions/v1/update-dmre-prices   (no body needed — fetches live)
+// Schedule: set up a Supabase pg_cron job to POST this on the 1st of each month
 
 import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient } from 'npm:@supabase/supabase-js'
@@ -11,25 +18,57 @@ const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! })
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, // service role — can bypass RLS
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
+
+// ── Price sources ──────────────────────────────────────────────────────────────
+const SOURCES = [
+  'https://www.aa.co.za/fuel-price/',
+  'https://www.energy.gov.za/petroleum/fuel-prices/retail-motor-fuel-price',
+]
+
+async function fetchPricePageText(): Promise<{ text: string; source: string }> {
+  for (const url of SOURCES) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'FuelWatch-SA/1.0 (price-updater)' },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!res.ok) continue
+      const html = await res.text()
+      // Strip scripts/styles to reduce tokens — keep visible text
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      if (text.length > 200) return { text: text.slice(0, 12_000), source: url }
+    } catch {
+      // try next source
+    }
+  }
+  throw new Error('All price sources failed to respond.')
+}
 
 // ── Tool schema ────────────────────────────────────────────────────────────────
 const extractPricesTool: Anthropic.Tool = {
-  name: 'save_dmre_prices',
+  name: 'save_fuel_prices',
   description:
-    'Save the official DMRE regulated fuel prices extracted from the gazette announcement. ' +
-    'Call this once with ALL prices found in the text.',
+    'Save the current South African retail fuel prices extracted from the page. ' +
+    'Include ALL fuel types for BOTH zones (inland and coastal). ' +
+    'Diesel prices are the DMRE maximum retail price per litre.',
   input_schema: {
     type: 'object' as const,
     properties: {
       effective_date: {
         type: 'string',
-        description: 'The date from which these prices are effective, in YYYY-MM-DD format.',
+        description:
+          'The date from which these prices are effective, YYYY-MM-DD. ' +
+          'If only a month/year is shown, use the first Wednesday of that month.',
       },
       prices: {
         type: 'array',
-        description: 'Array of fuel price entries.',
         items: {
           type: 'object',
           properties: {
@@ -37,19 +76,18 @@ const extractPricesTool: Anthropic.Tool = {
               type: 'string',
               enum: ['p93', 'p95', 'd005', 'd0005'],
               description:
-                'p93=95-octane unleaded (or 93), p95=95-octane premium, ' +
-                'd005=diesel 0.05% sulphur, d0005=diesel 0.005% sulphur',
+                'p93 = Petrol 93 (ULP 93), p95 = Petrol 95 (ULP 95), ' +
+                'd005 = Diesel 500ppm (0.05% sulphur), d0005 = Diesel 50ppm (0.005% sulphur)',
             },
             zone: {
               type: 'string',
               enum: ['inland', 'coastal'],
-              description: 'inland = Gauteng/Highveld, coastal = Cape Town/Durban/PE',
+              description: 'inland = Gauteng/Highveld, coastal = Cape Town/Durban/Port Elizabeth',
             },
             price_cents: {
               type: 'integer',
               description:
-                'Price in South African cents per litre (e.g. R24.50 = 2450). ' +
-                'Must be an integer number of cents.',
+                'Price in South African cents per litre. R24.50 = 2450. Must be integer cents.',
             },
           },
           required: ['fuel_type', 'zone', 'price_cents'],
@@ -62,7 +100,6 @@ const extractPricesTool: Anthropic.Tool = {
 
 // ── Handler ────────────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
-  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
@@ -74,42 +111,36 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const body = await req.json().catch(() => ({}))
-    const gazetteText: string | undefined = body.gazetteText
+    // ── Fetch live price page ─────────────────────────────────────────────────
+    const { text: pageText, source } = await fetchPricePageText()
+    console.log(`Fetched price data from: ${source} (${pageText.length} chars)`)
 
-    if (!gazetteText || gazetteText.trim().length < 50) {
-      return jsonResponse(
-        { error: 'gazetteText is required and must contain the DMRE announcement text.' },
-        400,
-      )
-    }
-
-    // ── Ask Claude to extract the prices ──────────────────────────────────────
+    // ── Ask Claude to extract prices ──────────────────────────────────────────
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-6',
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
+      max_tokens: 2048,
       tools: [extractPricesTool],
-      tool_choice: { type: 'tool', name: 'save_dmre_prices' },
+      tool_choice: { type: 'tool', name: 'save_fuel_prices' },
       system:
-        'You are a South African fuel price data extraction specialist. ' +
-        'You parse official DMRE (Department of Mineral Resources and Energy) gazette ' +
-        'announcements and extract regulated fuel prices. ' +
-        'Petrol (93 & 95 octane) and Diesel (500ppm & 50ppm sulphur) prices vary by ' +
-        'zone: INLAND (Gauteng/highveld areas) and COASTAL (Cape Town, Durban, PE). ' +
-        'Always convert rand amounts to integer cents (R24.50 → 2450). ' +
-        'Only extract prices that are explicitly stated; do not guess.',
+        'You are a South African fuel price extraction specialist. ' +
+        'You read web page text from the AA South Africa or DMRE website and extract ' +
+        'the current official retail fuel prices. ' +
+        'South Africa has four fuel types: Petrol 93, Petrol 95, Diesel 500ppm, Diesel 50ppm. ' +
+        'Prices differ between INLAND (Gauteng/Highveld) and COASTAL (Cape Town, Durban, PE) zones. ' +
+        'Always convert rand to integer cents (R24.36 → 2436). ' +
+        'Extract all 8 combinations (4 fuel types × 2 zones). ' +
+        'Only use prices explicitly stated in the text — do not guess.',
       messages: [
         {
           role: 'user',
           content:
-            'Please extract all fuel prices from the following DMRE gazette announcement:\n\n' +
-            gazetteText,
+            'Extract all current South African retail fuel prices from this page text:\n\n' +
+            pageText,
         },
       ],
     })
 
-    // ── Extract tool call result ───────────────────────────────────────────────
+    // ── Parse tool result ─────────────────────────────────────────────────────
     const toolUse = response.content.find(
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
     )
@@ -122,7 +153,11 @@ Deno.serve(async (req: Request) => {
       prices: Array<{ fuel_type: string; zone: string; price_cents: number }>
     }
 
-    // ── Upsert into dmre_prices ────────────────────────────────────────────────
+    if (!extracted.prices?.length) {
+      return jsonResponse({ error: 'No prices extracted from page.' }, 500)
+    }
+
+    // ── Upsert into dmre_prices ───────────────────────────────────────────────
     const rows = extracted.prices.map((p) => ({
       fuel_type: p.fuel_type,
       zone: p.zone,
@@ -139,8 +174,11 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: upsertError.message }, 500)
     }
 
+    console.log(`Upserted ${rows.length} price rows for ${extracted.effective_date}`)
+
     return jsonResponse({
       success: true,
+      source,
       effective_date: extracted.effective_date,
       rows_upserted: rows.length,
       prices: rows,
