@@ -1,29 +1,26 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- DMRE / AA Fuel Prices — manual seed (fallback if Edge Function is not deployed)
--- Source: https://www.aa.co.za/fuel-price/
--- Effective: 5 March 2026
---
--- Run in Supabase SQL editor. The Edge Function will overwrite these
--- automatically once deployed and invoked.
+-- DMRE Fuel Prices — effective 1 April 2026
+-- Source: DMRE official statement + BusinessTech + TopAuto
+-- Run in Supabase SQL editor to update all prices.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 INSERT INTO dmre_prices (fuel_type, zone, price_cents, effective_date)
 VALUES
-  -- Petrol 93 (ULP 93) — fixed retail price
-  ('p93', 'inland',  2436, '2026-03-05'),
-  ('p93', 'coastal', 2356, '2026-03-05'),
+  -- Petrol 93 ULP
+  ('p93', 'inland',  2325, '2026-04-01'),
+  ('p93', 'coastal', 2246, '2026-04-01'),
 
-  -- Petrol 95 (ULP 95) — fixed retail price
-  ('p95', 'inland',  2479, '2026-03-05'),
-  ('p95', 'coastal', 2399, '2026-03-05'),
+  -- Petrol 95 ULP
+  ('p95', 'inland',  2336, '2026-04-01'),
+  ('p95', 'coastal', 2253, '2026-04-01'),
 
-  -- Diesel 500ppm (0.05% sulphur) — DMRE maximum retail price
-  ('d005', 'inland',  2210, '2026-03-05'),
-  ('d005', 'coastal', 2153, '2026-03-05'),
+  -- Diesel 500ppm (0.05% sulphur)
+  ('d005', 'inland',  2590, '2026-04-01'),
+  ('d005', 'coastal', 2507, '2026-04-01'),
 
-  -- Diesel 50ppm (0.005% sulphur) — DMRE maximum retail price
-  ('d0005', 'inland',  2254, '2026-03-05'),
-  ('d0005', 'coastal', 2197, '2026-03-05')
+  -- Diesel 50ppm (0.005% sulphur)
+  ('d0005', 'inland',  2611, '2026-04-01'),
+  ('d0005', 'coastal', 2535, '2026-04-01')
 
 ON CONFLICT (fuel_type, zone, effective_date)
 DO UPDATE SET price_cents = EXCLUDED.price_cents;

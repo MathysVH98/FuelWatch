@@ -5,6 +5,7 @@ import { StationsPage } from './pages/StationsPage'
 import { MapPage } from './pages/MapPage'
 import { ReportPage } from './pages/ReportPage'
 import { AlertsPage } from './pages/AlertsPage'
+import { AdminPricesPage } from './pages/AdminPricesPage'
 import LoginPage from './pages/LoginPage'
 import './styles/globals.css'
 
@@ -34,6 +35,7 @@ function AppRouter() {
           <Route path="/map" element={<MapPage />} />
           <Route path="/report" element={<ReportPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/admin/prices" element={<AdminPricesPage />} />
         </Routes>
         <BottomNav />
       </div>
