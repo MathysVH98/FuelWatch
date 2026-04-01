@@ -1,20 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchStationsNearMe } from '../lib/supabase'
 import { fuelScore } from '../lib/scoring'
 import type { Station, FuelType, SortMode, Coords, LatestPrice } from '../types'
 
-/** Haversine formula — returns distance in kilometres. */
-function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLng = ((lng2 - lng1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+// Radius shown when the user has granted location — 15 km covers most urban areas.
+// Falls back to fetching all stations when location is unavailable.
+const RADIUS_M = 15_000
 
 interface RawStation {
   id: string
@@ -47,35 +38,74 @@ export function useStations(
     setError(null)
 
     try {
-      const [stationsRes, pricesRes] = await Promise.all([
-        supabase.from('stations').select('*'),
-        supabase.from('latest_prices').select('*'),
-      ])
+      // ── Step 1: fetch station list ────────────────────────────────────────────
+      // When the user has granted location permission use the PostGIS RPC so we
+      // only pull stations within RADIUS_M metres — much faster at scale.
+      // Fall back to the full table when location is not yet available.
+      let stationList: Array<{
+        id: string
+        name: string
+        brand: string
+        address: string | null
+        latitude: number
+        longitude: number
+        distance_km: number | undefined
+      }>
 
-      if (stationsRes.error) throw stationsRes.error
-      if (pricesRes.error) throw pricesRes.error
+      if (coords) {
+        const nearby = await fetchStationsNearMe(coords.lat, coords.lng, RADIUS_M)
+        stationList = nearby.map((s) => ({
+          id: s.id,
+          name: s.name,
+          brand: s.brand,
+          address: s.address,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          distance_km: s.distance_m / 1000,
+        }))
+      } else {
+        // No location — use the view which extracts lat/lng from the PostGIS column
+        const { data, error: stErr } = await supabase
+          .from('stations_with_coords')
+          .select('id, name, brand, address, latitude, longitude')
+        if (stErr) throw stErr
+        stationList = ((data ?? []) as RawStation[]).map((s) => ({
+          id: s.id,
+          name: s.name,
+          brand: s.brand,
+          address: s.address,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          distance_km: undefined,
+        }))
+      }
+
+      // ── Step 2: fetch prices only for the returned stations ───────────────────
+      const ids = stationList.map((s) => s.id)
+      const { data: priceData, error: prErr } = ids.length
+        ? await supabase.from('latest_prices').select('*').in('station_id', ids)
+        : { data: [], error: null }
+
+      if (prErr) throw prErr
 
       const priceMap = new Map<string, Partial<Record<FuelType, number>>>()
-      const priceRows = (pricesRes.data ?? []) as LatestPrice[]
-      for (const row of priceRows) {
+      for (const row of (priceData ?? []) as LatestPrice[]) {
         const existing = priceMap.get(row.station_id) ?? {}
         existing[row.fuel_type as FuelType] = row.price_cents
         priceMap.set(row.station_id, existing)
       }
 
-      const stationRows = (stationsRes.data ?? []) as RawStation[]
-      const stations: Station[] = stationRows.map((s) => ({
+      // ── Step 3: assemble Station objects ─────────────────────────────────────
+      const stations: Station[] = stationList.map((s) => ({
         id: s.id,
         name: s.name,
         brand: s.brand as Station['brand'],
         address: s.address,
         latitude: s.latitude,
         longitude: s.longitude,
-        created_at: s.created_at,
+        created_at: '',
         prices: priceMap.get(s.id),
-        distance: coords
-          ? haversine(coords.lat, coords.lng, s.latitude, s.longitude)
-          : undefined,
+        distance: s.distance_km,
       }))
 
       setRawStations(stations)
@@ -86,46 +116,35 @@ export function useStations(
     }
   }, [coords])
 
-  // Re-attach distances whenever coords change without a full refetch
-  const stationsWithDist: Station[] = rawStations.map((s) => ({
-    ...s,
-    distance: coords
-      ? haversine(coords.lat, coords.lng, s.latitude, s.longitude)
-      : s.distance,
-  }))
-
   useEffect(() => {
     void fetchData()
   }, [fetchData])
 
-  // Realtime subscription for new price reports
+  // Realtime — any new price report triggers a refresh
   useEffect(() => {
     const channel = supabase
       .channel('price_reports_changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'price_reports' },
-        () => {
-          void fetchData()
-        }
+        () => { void fetchData() }
       )
       .subscribe()
 
-    return () => {
-      void supabase.removeChannel(channel)
-    }
+    return () => { void supabase.removeChannel(channel) }
   }, [fetchData])
 
-  const sorted = [...stationsWithDist].sort((a, b) => {
+  // ── Sort ────────────────────────────────────────────────────────────────────
+  const sorted = [...rawStations].sort((a, b) => {
     if (sortMode === 'nearest') {
       return (a.distance ?? Infinity) - (b.distance ?? Infinity)
     }
     if (sortMode === 'price') {
       return (a.prices?.[fuelType] ?? Infinity) - (b.prices?.[fuelType] ?? Infinity)
     }
-    // best_deal
-    const scoreA = fuelScore(a, fuelType, stationsWithDist) ?? Infinity
-    const scoreB = fuelScore(b, fuelType, stationsWithDist) ?? Infinity
+    // best_deal — composite score of price + proximity
+    const scoreA = fuelScore(a, fuelType, rawStations) ?? Infinity
+    const scoreB = fuelScore(b, fuelType, rawStations) ?? Infinity
     return scoreA - scoreB
   })
 

@@ -17,13 +17,13 @@ function coord(n: number): string {
 //                        turn-by-turn navigation immediately.
 // travelmode=driving   → driving directions (not walking / transit).
 function gmapsUrl(lat: number, lng: number): string {
-  const base =
+  // Maps URL API does not use an API key — key is only for embedded/static maps
+  return (
     'https://www.google.com/maps/dir/?api=1' +
     `&destination=${coord(lat)},${coord(lng)}` +
     '&travelmode=driving' +
     '&dir_action=navigate'
-  // key param improves place matching accuracy when API key is present
-  return GMAPS_KEY ? `${base}&key=${GMAPS_KEY}` : base
+  )
 }
 
 // ── Static map preview ────────────────────────────────────────────────────────

@@ -51,7 +51,7 @@ export function DirectionsSheet({ station, fuelType, onClose }: DirectionsSheetP
         {/* Handle */}
         <div style={styles.handle} />
 
-        {/* Map preview */}
+        {/* Map preview — bleeds to edges */}
         {mapUrl && (
           <div style={styles.mapWrapper}>
             <img
@@ -60,9 +60,13 @@ export function DirectionsSheet({ station, fuelType, onClose }: DirectionsSheetP
               style={styles.mapImg}
               loading="lazy"
             />
+            {/* fade bottom edge into sheet background */}
             <div style={styles.mapOverlay} />
           </div>
         )}
+
+        {/* padded content area */}
+        <div style={styles.content}>
 
         {/* Station info */}
         <div style={styles.info}>
@@ -125,6 +129,8 @@ export function DirectionsSheet({ station, fuelType, onClose }: DirectionsSheetP
         <button onClick={onClose} style={styles.cancelBtn}>
           Cancel
         </button>
+
+        </div>{/* end padded content */}
       </div>
     </div>
   )
@@ -145,15 +151,39 @@ const styles = {
     background: 'var(--surface)',
     borderTop: '1px solid var(--border2)',
     borderRadius: '20px 20px 0 0',
+    overflow: 'hidden',
     paddingBottom: 'calc(16px + var(--safe-bottom))',
-    padding: '12px 24px calc(16px + var(--safe-bottom))',
   },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
     background: 'var(--border2)',
-    margin: '0 auto 20px',
+    margin: '12px auto 16px',
+  },
+  mapWrapper: {
+    position: 'relative' as const,
+    width: '100%',
+    height: 140,
+    overflow: 'hidden',
+    marginBottom: 0,
+  },
+  mapImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
+  },
+  mapOverlay: {
+    position: 'absolute' as const,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 48,
+    background: 'linear-gradient(to bottom, transparent, var(--surface))',
+  },
+  content: {
+    padding: '16px 24px 0',
   },
   info: {
     display: 'flex',
