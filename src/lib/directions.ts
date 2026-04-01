@@ -5,22 +5,23 @@ import type { Station } from '../types'
 const GMAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined
 
 // ── Coordinate formatting ─────────────────────────────────────────────────────
-// Cap at 6 decimal places (~0.1 m precision) to eliminate floating-point noise
-// such as -26.107600000000001 which can confuse some map parsers.
 function coord(n: number): string {
   return n.toFixed(6)
 }
 
 // ── URL builders ──────────────────────────────────────────────────────────────
 
-// dir_action=navigate  → skips the route-overview screen and launches
-//                        turn-by-turn navigation immediately.
-// travelmode=driving   → driving directions (not walking / transit).
-function gmapsUrl(lat: number, lng: number): string {
-  // Maps URL API does not use an API key — key is only for embedded/static maps
+// Use station name + address as the destination query so Google resolves the
+// actual business rather than reverse-geocoding raw coords to a nearby street.
+// Falls back to coordinates when address is missing.
+function gmapsUrl(station: Station): string {
+  const destination = station.address
+    ? encodeURIComponent(`${station.name}, ${station.address}`)
+    : `${coord(station.latitude)},${coord(station.longitude)}`
+
   return (
     'https://www.google.com/maps/dir/?api=1' +
-    `&destination=${coord(lat)},${coord(lng)}` +
+    `&destination=${destination}` +
     '&travelmode=driving' +
     '&dir_action=navigate'
   )
@@ -28,7 +29,7 @@ function gmapsUrl(lat: number, lng: number): string {
 
 // ── Static map preview ────────────────────────────────────────────────────────
 // Returns a Maps Static API URL for an in-app map thumbnail.
-// scale=2  → retina/HDPI, size=600x240 rendered at 300x120 CSS pixels.
+// scale=2 → retina/HDPI, size=600x240 rendered at 300x120 CSS pixels.
 export function staticMapUrl(lat: number, lng: number): string | null {
   if (!GMAPS_KEY) return null
   const c = `${coord(lat)},${coord(lng)}`
@@ -48,9 +49,12 @@ export function staticMapUrl(lat: number, lng: number): string | null {
   )
 }
 
-function wazeUrl(lat: number, lng: number): string {
-  // navigate=yes  → start navigation immediately (not just show the pin).
-  return `https://waze.com/ul?ll=${coord(lat)},${coord(lng)}&navigate=yes&zoom=17`
+function wazeUrl(station: Station): string {
+  // Waze supports a search query — use name + address for accuracy
+  const query = station.address
+    ? encodeURIComponent(`${station.name}, ${station.address}`)
+    : encodeURIComponent(station.name)
+  return `https://waze.com/ul?q=${query}&navigate=yes`
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -58,14 +62,9 @@ export async function openDirections(
   station: Station,
   app: 'gmaps' | 'waze'
 ): Promise<void> {
-  const { latitude: lat, longitude: lng } = station
-  const url = app === 'gmaps' ? gmapsUrl(lat, lng) : wazeUrl(lat, lng)
+  const url = app === 'gmaps' ? gmapsUrl(station) : wazeUrl(station)
 
   if (Capacitor.isNativePlatform()) {
-    // Browser.open() uses Chrome Custom Tabs (Android) and SFSafariViewController (iOS).
-    // Both platforms honour App Links / Universal Links, so a maps.google.com URL
-    // automatically opens the Google Maps app when it is installed, and falls back
-    // to the in-app browser when it is not — no custom URI scheme required.
     await Browser.open({ url })
   } else {
     window.open(url, '_blank', 'noopener,noreferrer')
