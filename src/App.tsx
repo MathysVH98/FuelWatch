@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuthContext } from './context/AuthContext'
 import { BottomNav } from './components/BottomNav'
+import { Sidebar } from './components/Sidebar'
 import { StationsPage } from './pages/StationsPage'
 import { MapPage } from './pages/MapPage'
 import { ReportPage } from './pages/ReportPage'
@@ -11,6 +13,7 @@ import './styles/globals.css'
 
 function AppRouter() {
   const { session, loading } = useAuthContext()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   if (loading) {
     return (
@@ -38,6 +41,20 @@ function AppRouter() {
           <Route path="/admin/prices" element={<AdminPricesPage />} />
         </Routes>
         <BottomNav />
+
+        {/* Hamburger button — fixed top-left, always visible */}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          style={hamburgerStyles.btn}
+          aria-label="Open menu"
+        >
+          <span style={hamburgerStyles.line} />
+          <span style={hamburgerStyles.line} />
+          <span style={{ ...hamburgerStyles.line, width: 14 }} />
+        </button>
+
+        {/* Sidebar drawer */}
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       </div>
     </BrowserRouter>
   )
@@ -49,6 +66,36 @@ export default function App() {
       <AppRouter />
     </AuthProvider>
   )
+}
+
+const hamburgerStyles = {
+  btn: {
+    position: 'fixed' as const,
+    top: 16,
+    left: 16,
+    zIndex: 150,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    background: 'rgba(6,10,18,0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid var(--border2)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    cursor: 'pointer',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+  },
+  line: {
+    display: 'block',
+    width: 18,
+    height: 2,
+    borderRadius: 2,
+    background: 'var(--text)',
+  },
 }
 
 const loadingStyles = {
