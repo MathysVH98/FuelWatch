@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import type { Station, FuelType } from '../types'
 import { formatPrice } from '../lib/priceColors'
 
@@ -45,6 +46,12 @@ function BrandBadge({ brand }: { brand: string }) {
 
 export function StationCard({ station, fuelType, priceColor, rank, onTap, isDmre }: StationCardProps) {
   const price = station.prices?.[fuelType]
+  const navigate = useNavigate()
+
+  function handleReport(e: React.MouseEvent) {
+    e.stopPropagation()
+    navigate(`/report?fuel=${fuelType}&station=${station.id}`)
+  }
 
   return (
     <button
@@ -65,9 +72,7 @@ export function StationCard({ station, fuelType, priceColor, rank, onTap, isDmre
             <BrandBadge brand={station.brand} />
           </div>
           <div style={{ ...styles.pricePill, borderColor: `${priceColor}44`, background: `${priceColor}14` }}>
-            {isDmre && (
-              <span style={styles.dmreMicro}>DMRE</span>
-            )}
+            {isDmre && <span style={styles.dmreMicro}>DMRE</span>}
             <span style={{ ...styles.priceText, color: priceColor }}>
               {price !== undefined ? formatPrice(price) : '—'}
             </span>
@@ -82,14 +87,20 @@ export function StationCard({ station, fuelType, priceColor, rank, onTap, isDmre
             {station.distance !== undefined && (
               <span style={styles.distance}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
+                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                 </svg>
                 {station.distance < 1
                   ? `${Math.round(station.distance * 1000)}m`
                   : `${station.distance.toFixed(1)}km`}
               </span>
             )}
+            {/* Report CTA — nudges users to correct DMRE placeholder prices */}
+            <button onClick={handleReport} style={styles.reportBtn} aria-label="Report a different price">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              {isDmre ? 'different price?' : 'update'}
+            </button>
           </div>
         </div>
       </div>
@@ -211,5 +222,20 @@ const styles = {
     color: 'var(--muted)',
     display: 'flex',
     alignItems: 'center',
+  },
+  reportBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 3,
+    padding: '3px 7px',
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    borderRadius: 4,
+    color: 'var(--muted)',
+    fontFamily: 'var(--font-hud)',
+    fontSize: '9px',
+    letterSpacing: '0.04em',
+    cursor: 'pointer',
+    flexShrink: 0 as const,
   },
 }
