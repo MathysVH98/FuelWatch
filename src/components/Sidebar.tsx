@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useAuthContext } from '../context/AuthContext'
 import { updateProfile, signOut } from '../lib/auth'
 import type { FuelType, PriceZone } from '../types'
@@ -39,8 +39,6 @@ const FUEL_OPTIONS: { value: FuelType; label: string }[] = [
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { user } = useAuthContext()
-  const navigate = useNavigate()
-
   // Profile edit state
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [zone, setZone] = useState<PriceZone>(user?.preferredZone ?? 'inland')
@@ -76,7 +74,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   async function handleSignOut() {
     await signOut()
     onClose()
-    navigate('/')
   }
 
   function handleNavClick() {
