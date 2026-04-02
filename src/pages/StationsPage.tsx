@@ -29,7 +29,7 @@ export function StationsPage() {
   // Default zone from user profile, fallback to inland
   const [zone, setZone] = useState<PriceZone>(user?.preferredZone ?? 'inland')
 
-  const { coords } = useGeolocation()
+  const { coords, permissionState, requestLocation } = useGeolocation()
   const { stations, loading, error } = useStations(coords, fuelType, sortMode)
   const { prices: dmrePrices, effectiveDate, loading: dmreLoading } = useDmrePrices(zone)
 
@@ -116,6 +116,31 @@ export function StationsPage() {
       <div style={styles.tabsSection}>
         <FuelTabs selected={fuelType} onChange={setFuelType} />
       </div>
+
+      {/* Location permission banner */}
+      {permissionState === 'prompt' && (
+        <div style={styles.locationBanner}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          <span style={styles.locationBannerText}>
+            Enable location to find stations near you and sort by distance.
+          </span>
+          <button onClick={requestLocation} style={styles.locationBannerBtn}>
+            Allow
+          </button>
+        </div>
+      )}
+      {permissionState === 'denied' && (
+        <div style={styles.locationDeniedBanner}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          <span style={styles.locationBannerText}>
+            Location blocked — enable it in your browser/app settings to sort by distance.
+          </span>
+        </div>
+      )}
 
       {/* Regulated / DMRE info banner */}
       {isRegulated && (
@@ -423,5 +448,43 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 8,
+  },
+  locationBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 16px',
+    background: 'rgba(0,200,255,0.06)',
+    borderTop: '1px solid rgba(0,200,255,0.15)',
+    borderBottom: '1px solid rgba(0,200,255,0.15)',
+  },
+  locationDeniedBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 16px',
+    background: 'rgba(255,200,0,0.05)',
+    borderTop: '1px solid rgba(255,200,0,0.15)',
+    borderBottom: '1px solid rgba(255,200,0,0.15)',
+  },
+  locationBannerText: {
+    flex: 1,
+    fontFamily: 'var(--font-body)',
+    fontSize: '12px',
+    color: 'var(--muted)',
+    lineHeight: 1.4,
+  },
+  locationBannerBtn: {
+    flexShrink: 0,
+    padding: '6px 14px',
+    background: 'var(--cyan)',
+    border: 'none',
+    borderRadius: 6,
+    color: 'var(--bg)',
+    fontFamily: 'var(--font-hud)',
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    cursor: 'pointer',
   },
 }
