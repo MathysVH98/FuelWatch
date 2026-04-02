@@ -86,8 +86,11 @@ export function StationCard({ station, fuelType, priceColor, rank, onTap, isDmre
   }
 
   return (
-    <button
+    <div
       onClick={onTap}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onTap() }}
       style={styles.card}
       aria-label={`${station.name} — tap for directions`}
     >
@@ -141,7 +144,7 @@ export function StationCard({ station, fuelType, priceColor, rank, onTap, isDmre
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--border2)" strokeWidth="2" style={{ flexShrink: 0 }}>
         <polyline points="9 18 15 12 9 6" />
       </svg>
-    </button>
+    </div>
   )
 }
 
