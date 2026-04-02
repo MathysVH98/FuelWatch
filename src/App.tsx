@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuthContext } from './context/AuthContext'
 import { BottomNav } from './components/BottomNav'
 import { Sidebar } from './components/Sidebar'
@@ -38,7 +38,14 @@ function AppRouter() {
           <Route path="/map" element={<MapPage />} />
           <Route path="/report" element={<ReportPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
-          <Route path="/admin/prices" element={<AdminPricesPage />} />
+          <Route
+            path="/admin/prices"
+            element={
+              session.user.email === 'tj.vanheerden717@gmail.com'
+                ? <AdminPricesPage />
+                : <Navigate to="/" replace />
+            }
+          />
         </Routes>
         <BottomNav />
 

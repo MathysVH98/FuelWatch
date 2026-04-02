@@ -9,6 +9,8 @@ interface SidebarProps {
   onClose: () => void
 }
 
+const ADMIN_EMAILS = ['tj.vanheerden717@gmail.com']
+
 const NAV_ITEMS = [
   {
     to: '/', label: 'Stations', exact: true,
@@ -47,6 +49,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const [notifyCheaper, setNotifyCheaper] = useState(user?.notifyCheaper ?? false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? '')
 
   const initials = (displayName || user?.email || 'U')
     .split(' ')
@@ -227,8 +231,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
           <div style={s.divider} />
 
-          {/* Admin link */}
-          <div style={s.section}>
+          {/* Admin link — only visible to admin users */}
+          {isAdmin && <div style={s.section}>
             <div style={s.sectionLabel}>ADMIN</div>
             <NavLink to="/admin/prices" onClick={handleNavClick} style={{ textDecoration: 'none' }}>
               {({ isActive }) => (
@@ -244,7 +248,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 </div>
               )}
             </NavLink>
-          </div>
+          </div>}
 
           {/* Save button */}
           <div style={s.section}>
