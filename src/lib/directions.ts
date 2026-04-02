@@ -27,26 +27,22 @@ function gmapsUrl(station: Station): string {
   )
 }
 
-// ── Static map preview ────────────────────────────────────────────────────────
-// Returns a Maps Static API URL for an in-app map thumbnail.
-// scale=2 → retina/HDPI, size=600x240 rendered at 300x120 CSS pixels.
+// ── Street View preview ───────────────────────────────────────────────────────
+// Returns a Street View Static API URL showing the actual station.
+// return_error_codes=true → 404 instead of grey placeholder when no imagery,
+// so the caller can handle it with an onError fallback.
 export function staticMapUrl(lat: number, lng: number): string | null {
   if (!GMAPS_KEY) return null
-  const c = `${coord(lat)},${coord(lng)}`
-  return (
-    'https://maps.googleapis.com/maps/api/staticmap' +
-    `?center=${c}` +
-    '&zoom=15' +
-    '&size=600x240' +
-    '&scale=2' +
-    '&style=element:geometry|color:0x0B1220' +
-    '&style=element:labels.text.fill|color:0x4A6080' +
-    '&style=feature:road|element:geometry|color:0x111D30' +
-    '&style=feature:road|element:geometry.stroke|color:0x1a2a45' +
-    '&style=feature:water|element:geometry|color:0x060A12' +
-    `&markers=color:0x00C8FF|label:F|${c}` +
-    `&key=${GMAPS_KEY}`
-  )
+  const params = new URLSearchParams({
+    size: '600x240',
+    scale: '2',
+    location: `${coord(lat)},${coord(lng)}`,
+    fov: '80',
+    pitch: '5',
+    return_error_codes: 'true',
+    key: GMAPS_KEY,
+  })
+  return `https://maps.googleapis.com/maps/api/streetview?${params.toString()}`
 }
 
 function wazeUrl(station: Station): string {

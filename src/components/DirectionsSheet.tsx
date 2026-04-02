@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { Station, FuelType } from '../types'
 import { openDirections, staticMapUrl } from '../lib/directions'
 import { formatPrice } from '../lib/priceColors'
@@ -19,6 +19,7 @@ const FUEL_LABELS: Record<FuelType, string> = {
 export function DirectionsSheet({ station, fuelType, onClose }: DirectionsSheetProps) {
   const price = station.prices?.[fuelType]
   const mapUrl = staticMapUrl(station.latitude, station.longitude)
+  const [imgFailed, setImgFailed] = useState(false)
 
   // Close on Escape
   useEffect(() => {
@@ -51,19 +52,25 @@ export function DirectionsSheet({ station, fuelType, onClose }: DirectionsSheetP
         {/* Handle */}
         <div style={styles.handle} />
 
-        {/* Map preview — bleeds to edges */}
-        {mapUrl && (
-          <div style={styles.mapWrapper}>
+        {/* Station photo — bleeds to edges */}
+        <div style={styles.mapWrapper}>
+          {mapUrl && !imgFailed ? (
             <img
               src={mapUrl}
-              alt={`Map showing ${station.name}`}
+              alt={station.name}
               style={styles.mapImg}
-              loading="lazy"
+              onError={() => setImgFailed(true)}
             />
-            {/* fade bottom edge into sheet background */}
-            <div style={styles.mapOverlay} />
-          </div>
-        )}
+          ) : (
+            <div style={styles.mapPlaceholder}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+              <span style={styles.mapPlaceholderText}>{station.brand}</span>
+            </div>
+          )}
+          <div style={styles.mapOverlay} />
+        </div>
 
         {/* padded content area */}
         <div style={styles.content}>
@@ -181,6 +188,22 @@ const styles = {
     right: 0,
     height: 48,
     background: 'linear-gradient(to bottom, transparent, var(--surface))',
+  },
+  mapPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    background: 'var(--surface2)',
+  },
+  mapPlaceholderText: {
+    fontFamily: 'var(--font-hud)',
+    fontSize: '11px',
+    letterSpacing: '0.1em',
+    color: 'var(--muted)',
   },
   content: {
     padding: '16px 24px 0',
