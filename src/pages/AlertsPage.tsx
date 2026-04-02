@@ -117,7 +117,7 @@ function ToggleRow({ label, description, enabled, onToggle }: ToggleRowProps) {
 const styles = {
   page: {},
   header: {
-    padding: '20px 20px 8px',
+    padding: '20px 20px 8px 68px',
   },
   headerLeft: {
     display: 'flex',

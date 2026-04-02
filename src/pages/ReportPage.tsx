@@ -210,7 +210,7 @@ export function ReportPage() {
 
 const styles = {
   page: {},
-  header: { padding: '20px 20px 8px' },
+  header: { padding: '20px 20px 8px 68px' },
   title: { fontFamily: 'var(--font-hud)', fontSize: '22px', fontWeight: 900, letterSpacing: '0.12em', color: 'var(--cyan)' },
   subtitle: { fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', display: 'block', marginTop: 4, lineHeight: 1.5 },
   form: { display: 'flex', flexDirection: 'column' as const, gap: 24, padding: '20px 16px' },

@@ -275,7 +275,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '20px 20px 12px',
+    padding: '20px 20px 12px 68px', // 68px left clears the 40px hamburger at left:16
     gap: 12,
   },
   appTitle: {

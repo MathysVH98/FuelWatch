@@ -163,7 +163,7 @@ const styles = {
     flexDirection: 'column' as const,
   },
   header: {
-    padding: '20px 20px 12px',
+    padding: '20px 20px 12px 68px',
   },
   title: {
     fontFamily: 'var(--font-hud)',
