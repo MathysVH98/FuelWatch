@@ -25,6 +25,25 @@ export async function signUp(
     options: { data: { full_name: displayName } },
   })
   if (error) throw error
+
+  // Pre-create the profile row so it exists immediately after signup.
+  // Uses upsert so it's safe if a DB trigger already created one.
+  if (data.user) {
+    await supabase.from('profiles').upsert(
+      {
+        id: data.user.id,
+        display_name: displayName || null,
+        reports_count: 0,
+        reputation: 100,
+        preferred_zone: 'inland',
+        preferred_fuel: 'd005',
+        notify_dmre: false,
+        notify_cheaper: false,
+      },
+      { onConflict: 'id' },
+    )
+  }
+
   return data
 }
 
