@@ -11,6 +11,20 @@ type AuthState = {
   error:    string | null
 }
 
+function defaultUser(session: Session): AuthUser {
+  return {
+    id: session.user.id,
+    email: session.user.email,
+    displayName: session.user.user_metadata?.full_name ?? null,
+    reportsCount: 0,
+    reputation: 100,
+    preferredZone: 'inland',
+    preferredFuel: 'd005',
+    notifyDmre: false,
+    notifyCheaper: false,
+  }
+}
+
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
     session: null,
@@ -20,64 +34,56 @@ export function useAuth() {
   })
 
   useEffect(() => {
-    // Safety net — never leave the app stuck on the loading screen
+    // Hard safety net — if onAuthStateChange never fires (network completely
+    // unreachable on first launch), don't leave user stuck on loading screen
     const timeout = setTimeout(() => {
       setState((prev) => prev.loading ? { ...prev, loading: false } : prev)
-    }, 3000)
+    }, 4000)
 
-    // Get initial session on mount
-    supabase.auth.getSession()
-      .then(async ({ data: { session } }) => {
-        clearTimeout(timeout)
-        if (session?.user) {
-          const profile = await getProfile(session.user.id)
-          const user = profile
-            ? { ...profile, email: session.user.email }
-            : {
-                id: session.user.id,
-                email: session.user.email,
-                displayName: null,
-                reportsCount: 0,
-                reputation: 100,
-                preferredZone: 'inland' as const,
-                preferredFuel: 'd005' as const,
-                notifyDmre: false,
-                notifyCheaper: false,
-              }
-          setState({ session, user, loading: false, error: null })
-        } else {
-          setState({ session: null, user: null, loading: false, error: null })
-        }
-      })
-      .catch((err) => {
-        clearTimeout(timeout)
-        console.error('getSession error:', err)
-        setState({ session: null, user: null, loading: false, error: null })
-      })
-
-    // Listen for auth changes (login, logout, token refresh)
+    // Supabase v2 fires INITIAL_SESSION on mount with the persisted session
+    // (or null). This replaces the separate getSession() call and is reliable
+    // on both web and Capacitor/Android.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          const profile = await getProfile(session.user.id)
-          // If profile is missing (e.g. DB trigger hasn't fired yet for a
-          // brand-new user), use sensible defaults so the user isn't locked out.
-          const user = profile
-            ? { ...profile, email: session.user.email }
-            : {
-                id: session.user.id,
-                email: session.user.email,
-                displayName: null,
-                reportsCount: 0,
-                reputation: 100,
-                preferredZone: 'inland' as const,
-                preferredFuel: 'd005' as const,
-                notifyDmre: false,
-                notifyCheaper: false,
+      (event, session) => {
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+          // Resolve loading immediately — don't wait for network
+          clearTimeout(timeout)
+          if (session) {
+            // Let user in right away with metadata-based defaults…
+            setState({ session, user: defaultUser(session), loading: false, error: null })
+            // …then silently enrich with the DB profile in background
+            void getProfile(session.user.id).then((profile) => {
+              if (profile) {
+                setState((prev) => prev.session?.user.id === session.user.id
+                  ? { ...prev, user: { ...profile, email: session.user.email } }
+                  : prev
+                )
               }
-          setState({ session, user, loading: false, error: null })
-        } else {
-          setState({ session: null, user: null, loading: false, error: null })
+            })
+          } else {
+            setState({ session: null, user: null, loading: false, error: null })
+          }
+          return
+        }
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          clearTimeout(timeout)
+          if (session) {
+            setState((prev) => ({
+              ...prev,
+              session,
+              user: prev.user ?? defaultUser(session),
+              loading: false,
+            }))
+            void getProfile(session.user.id).then((profile) => {
+              if (profile) {
+                setState((prev) => prev.session?.user.id === session.user.id
+                  ? { ...prev, user: { ...profile, email: session.user.email } }
+                  : prev
+                )
+              }
+            })
+          }
         }
       }
     )

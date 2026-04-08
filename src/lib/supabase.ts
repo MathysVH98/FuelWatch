@@ -14,7 +14,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // false on native — there is no URL to parse on Android/iOS
+    detectSessionInUrl: false,
   },
 })
 

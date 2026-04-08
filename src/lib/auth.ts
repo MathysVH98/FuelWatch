@@ -26,10 +26,10 @@ export async function signUp(
   })
   if (error) throw error
 
-  // Pre-create the profile row so it exists immediately after signup.
-  // Uses upsert so it's safe if a DB trigger already created one.
+  // Fire profile upsert in background — don't block signup on this network call.
+  // useAuth's defaultUser() handles the case where the row doesn't exist yet.
   if (data.user) {
-    await supabase.from('profiles').upsert(
+    void supabase.from('profiles').upsert(
       {
         id: data.user.id,
         display_name: displayName || null,
