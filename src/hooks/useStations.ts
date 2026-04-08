@@ -3,9 +3,11 @@ import { supabase, fetchStationsNearMe } from '../lib/supabase'
 import { fuelScore } from '../lib/scoring'
 import type { Station, FuelType, SortMode, Coords, LatestPrice } from '../types'
 
-// Radius shown when the user has granted location — 15 km covers most urban areas.
-// Falls back to fetching all stations when location is unavailable.
-const RADIUS_M = 15_000
+// Search radii — we try increasingly large circles so a user in any SA city
+// always sees results, even if no stations have been added nearby yet.
+const RADIUS_NEARBY_M  = 30_000   // 30 km  — first try (most urban users)
+const RADIUS_REGION_M  = 100_000  // 100 km — second try (smaller towns)
+const RADIUS_COUNTRY_M = 500_000  // 500 km — last resort (covers all of SA)
 
 interface RawStation {
   id: string
@@ -39,9 +41,6 @@ export function useStations(
 
     try {
       // ── Step 1: fetch station list ────────────────────────────────────────────
-      // When the user has granted location permission use the PostGIS RPC so we
-      // only pull stations within RADIUS_M metres — much faster at scale.
-      // Fall back to the full table when location is not yet available.
       let stationList: Array<{
         id: string
         name: string
@@ -53,7 +52,16 @@ export function useStations(
       }>
 
       if (coords) {
-        const nearby = await fetchStationsNearMe(coords.lat, coords.lng, RADIUS_M)
+        // Try progressively larger radii so every user sees results regardless
+        // of how many stations are near them in the database.
+        let nearby = await fetchStationsNearMe(coords.lat, coords.lng, RADIUS_NEARBY_M)
+        if (nearby.length === 0) {
+          nearby = await fetchStationsNearMe(coords.lat, coords.lng, RADIUS_REGION_M)
+        }
+        if (nearby.length === 0) {
+          nearby = await fetchStationsNearMe(coords.lat, coords.lng, RADIUS_COUNTRY_M)
+        }
+
         stationList = nearby.map((s) => ({
           id: s.id,
           name: s.name,
@@ -64,7 +72,7 @@ export function useStations(
           distance_km: s.distance_m / 1000,
         }))
       } else {
-        // No location — use the view which extracts lat/lng from the PostGIS column
+        // No location — return all stations; client will sort by price/score
         const { data, error: stErr } = await supabase
           .from('stations_with_coords')
           .select('id, name, brand, address, latitude, longitude')
@@ -80,7 +88,7 @@ export function useStations(
         }))
       }
 
-      // ── Step 2: fetch prices only for the returned stations ───────────────────
+      // ── Step 2: fetch prices only for returned stations ───────────────────────
       const ids = stationList.map((s) => s.id)
       const { data: priceData, error: prErr } = ids.length
         ? await supabase.from('latest_prices').select('*').in('station_id', ids)
