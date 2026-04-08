@@ -78,7 +78,7 @@ export default function App() {
 const hamburgerStyles = {
   btn: {
     position: 'fixed' as const,
-    top: 16,
+    top: 'calc(16px + var(--safe-top))',
     left: 16,
     zIndex: 150,
     width: 40,
