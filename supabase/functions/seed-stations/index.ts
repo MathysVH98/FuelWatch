@@ -58,14 +58,20 @@ function determineZone(lat: number, lng: number): 'inland' | 'coastal' {
   return 'inland'
 }
 
-// ── Overpass query ────────────────────────────────────────────────────────────
+// ── Overpass mirrors (try in order) ──────────────────────────────────────────
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+]
+
+// Query by bounding box covering all of South Africa
+// (lat -35 to -22, lng 16 to 33) — simpler and faster than area query
 const OVERPASS_QUERY = `
-[out:json][timeout:180];
-area["ISO3166-1"="ZA"][admin_level=2]->.sa;
+[out:json][timeout:120];
 (
-  node["amenity"="fuel"](area.sa);
-  way["amenity"="fuel"](area.sa);
-  relation["amenity"="fuel"](area.sa);
+  node["amenity"="fuel"](-35,16,-22,33);
+  way["amenity"="fuel"](-35,16,-22,33);
 );
 out center tags;
 `.trim()
@@ -84,15 +90,28 @@ interface OverpassResponse {
 }
 
 async function fetchFromOverpass(): Promise<OverpassElement[]> {
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(OVERPASS_QUERY)}`,
-    signal: AbortSignal.timeout(120_000),
-  })
-  if (!res.ok) throw new Error(`Overpass responded ${res.status}: ${await res.text()}`)
-  const json = await res.json() as OverpassResponse
-  return json.elements ?? []
+  let lastError: Error = new Error('No endpoints tried')
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      console.log(`Trying Overpass endpoint: ${endpoint}`)
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(OVERPASS_QUERY)}`,
+        signal: AbortSignal.timeout(90_000),
+      })
+      if (!res.ok) {
+        lastError = new Error(`Overpass ${endpoint} responded ${res.status}`)
+        continue
+      }
+      const json = await res.json() as OverpassResponse
+      return json.elements ?? []
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      console.warn(`Endpoint ${endpoint} failed: ${lastError.message}`)
+    }
+  }
+  throw lastError
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
